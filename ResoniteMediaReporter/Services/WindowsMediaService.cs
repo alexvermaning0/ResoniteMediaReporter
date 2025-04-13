@@ -64,7 +64,7 @@ namespace ResoniteMediaReporter.Services
             } catch (Exception ex)
             {
                 NowPlaying = "Not Currently Playing Anything";
-                Console.WriteLine($"[EXCEPTION CAUGHT IN MEDIA SERVICE] {ex.StackTrace}");
+                Console.WriteLine($"[EXCEPTION CAUGHT IN MEDIA SERVICE] {ex.Message}\n{ex.StackTrace}");
                 return NowPlaying;
             }
         }

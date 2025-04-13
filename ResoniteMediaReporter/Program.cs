@@ -1,5 +1,4 @@
-﻿using NetCoreServer;
-using ResoniteMediaReporter;
+﻿using ResoniteMediaReporter;
 
 int port = 8080;
 if (args.Length > 0) 

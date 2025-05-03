@@ -11,6 +11,7 @@ namespace ResoniteMediaReporter
     public class ResoniteWSServer : WsServer
     {
         public ResoniteWSServer(string address, int port) : base(address, port) {}
+        public Config Config { get; set; }
         protected override TcpSession CreateSession() { return new ResoniteWSSession(this); }
     }
 }

@@ -1,8 +1,7 @@
 ﻿using ResoniteMediaReporter;
+using System.Text.Json;
 
 int port = 8080;
-if (args.Length > 0) 
-    port = int.Parse(args[0]);
 
 Console.WriteLine($"Starting Resonite Media Reporter...");
 
@@ -12,7 +11,29 @@ if (Environment.OSVersion.Platform == PlatformID.Unix)
     Environment.Exit(1);
 }
 
-var server = new ResoniteWSServer("127.0.0.1", port);
+if (!File.Exists("config.json"))
+{
+    // create a new Config object and save it to 'config.json'
+
+    Config config = new Config
+    {
+        Port = port,
+        IgnorePlayers = Array.Empty<string>()
+    };
+
+    JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
+    string serializedConfig = JsonSerializer.Serialize(config, options);
+
+    Console.WriteLine($"Config Not Found - Writing New Config\n{serializedConfig}");
+
+    File.WriteAllText("config.json", serializedConfig);
+}
+
+// deserialize config
+Config configFile = JsonSerializer.Deserialize<Config>(File.ReadAllText("config.json"));
+
+var server = new ResoniteWSServer("127.0.0.1", configFile.Port);
+server.Config = configFile;
 
 // start websocket server
 server.Start();

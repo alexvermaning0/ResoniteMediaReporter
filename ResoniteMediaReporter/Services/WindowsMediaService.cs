@@ -36,9 +36,13 @@ namespace ResoniteMediaReporter.Services
 
                     foreach(var player in server.Config.IgnorePlayers)
                     {
-                        if (!CurrentMediaSession.SourceAppUserModelId.Contains(player)) continue;
+                        if (!CurrentMediaSession.SourceAppUserModelId.Contains(player))
+                        {
+                            if (System.Diagnostics.Debugger.IsAttached) Console.WriteLine($"[DEBUG] Passing Player - {CurrentMediaSession.SourceAppUserModelId}");
+                        }
                         else
                         {
+                            if (System.Diagnostics.Debugger.IsAttached) Console.WriteLine($"[DEBUG] Ignoring Player - {CurrentMediaSession.SourceAppUserModelId}");
                             NowPlaying = "Media Not Detected";
                             return NowPlaying;
                         }

@@ -50,9 +50,9 @@ namespace ResoniteMediaReporter.Services
                 CurrentMediaSession.PlaybackInfoChanged += CurrentMediaSession_PlaybackInfoChanged;
 
                 UpdateAndGetCurrentlyPlayingMedia();
-            }
 
-            Console.WriteLine($"[WMS] Current Media Session Changed, Detected Player - {CurrentMediaSession.SourceAppUserModelId}");
+                Console.WriteLine($"[WMS] Current Media Session Changed, Detected Player - {CurrentMediaSession.SourceAppUserModelId}");
+            }
         }
 
         private void CurrentMediaSession_MediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)

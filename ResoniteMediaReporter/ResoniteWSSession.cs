@@ -4,10 +4,10 @@ using System.Text;
 
 namespace ResoniteMediaReporter
 {
-    class ResoniteWSSession : WsSession
+    public class ResoniteWSSession : WsSession
     {
         private WindowsMediaService WMService { get; set; }
-        public ResoniteWSSession(ResoniteWSServer server) : base(server) => WMService = new WindowsMediaService(server);
+        public ResoniteWSSession(ResoniteWSServer server) : base(server) => WMService = new WindowsMediaService(this, server);
 
         public override void OnWsConnected(HttpRequest request)
         {
@@ -20,12 +20,10 @@ namespace ResoniteMediaReporter
             if (System.Diagnostics.Debugger.IsAttached) Console.WriteLine($"[DEBUG] Received Message - {msg}");
             switch(msg)
             {
-                case "GetCurrentlyPlayingMedia":
-                    // update WMService now playing
-                    var nowPlaying = await WMService.UpdateAndGetCurrentlyPlayingMedia();
+                case "ForceUpdateMedia":
+                    WMService.UpdateAndGetCurrentlyPlayingMedia();
 
-                    // send now playing
-                    SendText(nowPlaying);
+                    SendText("DONE");
                     break;
                 case "PlayMedia":
                     await WMService.TryMediaControl(WindowsMediaService.MediaControlType.Play);
@@ -44,6 +42,11 @@ namespace ResoniteMediaReporter
                     break;
                 case "SkipToNextMedia":
                     await WMService.TryMediaControl(WindowsMediaService.MediaControlType.Skip);
+
+                    SendText("DONE");
+                    break;
+                case "SkipToPreviousMedia":
+                    await WMService.TryMediaControl(WindowsMediaService.MediaControlType.Previous);
 
                     SendText("DONE");
                     break;

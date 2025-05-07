@@ -4,37 +4,85 @@ namespace ResoniteMediaReporter.Services
 {
     public class WindowsMediaService
     {
-        public string NowPlaying { get; private set; } = "Not Currently Playing Anything";
+        private string NowPlaying = "Not Currently Playing Anything";
 
         public GlobalSystemMediaTransportControlsSessionManager MediaTransportControlsSessionManager;
         public GlobalSystemMediaTransportControlsSession CurrentMediaSession;
         public GlobalSystemMediaTransportControlsSessionMediaProperties CurrentMediaProperties;
 
-        public ResoniteWSServer server { get; private set; }
+        public ResoniteWSSession WSSession { get; private set; }
+        public ResoniteWSServer Server { get; private set; }
 
-        public WindowsMediaService(ResoniteWSServer server)
+        public WindowsMediaService(ResoniteWSSession session, ResoniteWSServer server)
         {
-            this.server = server;
+            WSSession = session;
+            Server = server;
 
             Console.WriteLine("Initializing Windows Media Service For Client...");
             SetSystemMediaTransportControlsSessionManager().GetAwaiter().GetResult();
+
+            MediaTransportControlsSessionManager.CurrentSessionChanged += MediaTransportControlsSessionManager_CurrentSessionChanged;
+
+            // try and get current session
+            CurrentMediaSession = MediaTransportControlsSessionManager.GetCurrentSession();
+            CurrentMediaProperties = CurrentMediaSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
+            if (CurrentMediaSession != null)
+            {
+                CurrentMediaSession.MediaPropertiesChanged += CurrentMediaSession_MediaPropertiesChanged;
+                CurrentMediaSession.PlaybackInfoChanged += CurrentMediaSession_PlaybackInfoChanged;
+
+                UpdateAndGetCurrentlyPlayingMedia();
+            }
+            else WSSession.SendText(NowPlaying);
+
             Console.WriteLine("WMS Ready");
         }
+
+        private void MediaTransportControlsSessionManager_CurrentSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
+        {
+            // get and set session and properties
+            CurrentMediaSession = MediaTransportControlsSessionManager.GetCurrentSession();
+
+            // reset events
+            if (CurrentMediaSession != null)
+            {
+                CurrentMediaSession.MediaPropertiesChanged += CurrentMediaSession_MediaPropertiesChanged;
+                CurrentMediaSession.PlaybackInfoChanged += CurrentMediaSession_PlaybackInfoChanged;
+
+                UpdateAndGetCurrentlyPlayingMedia();
+            }
+
+            Console.WriteLine($"[WMS] Current Media Session Changed, Detected Player - {CurrentMediaSession.SourceAppUserModelId}");
+        }
+
+        private void CurrentMediaSession_MediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)
+        {
+            CurrentMediaProperties = CurrentMediaSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
+
+            if (CurrentMediaProperties != null)
+            {
+                // tigger update function
+                UpdateAndGetCurrentlyPlayingMedia();
+            }
+        }
+
+        private void CurrentMediaSession_PlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
+        {
+            // tigger update function
+            UpdateAndGetCurrentlyPlayingMedia();
+        }
+
         private async Task SetSystemMediaTransportControlsSessionManager() => MediaTransportControlsSessionManager = await GetSystemMediaTransportControlsSessionManager();
 
-        public async Task<string> UpdateAndGetCurrentlyPlayingMedia()
+        public void UpdateAndGetCurrentlyPlayingMedia()
         {
             try
             {
-                var session = MediaTransportControlsSessionManager!.GetCurrentSession();
-                if (session != null)
+                if (CurrentMediaSession != null && CurrentMediaProperties != null)
                 {
-                    CurrentMediaSession = session;
-                    CurrentMediaProperties = await GetMediaProperties(CurrentMediaSession);
-
                     var playbackInfo = CurrentMediaSession.GetPlaybackInfo();
 
-                    foreach(var player in server.Config.IgnorePlayers)
+                    foreach(var player in Server.Config.IgnorePlayers)
                     {
                         if (!CurrentMediaSession.SourceAppUserModelId.Contains(player))
                         {
@@ -44,7 +92,6 @@ namespace ResoniteMediaReporter.Services
                         {
                             if (System.Diagnostics.Debugger.IsAttached) Console.WriteLine($"[DEBUG] Ignoring Player - {CurrentMediaSession.SourceAppUserModelId}");
                             NowPlaying = "Media Not Detected";
-                            return NowPlaying;
                         }
                     }
 
@@ -67,46 +114,48 @@ namespace ResoniteMediaReporter.Services
                     {
                         NowPlaying = "[Paused] " + NowPlaying;
                     }
-
-                    return NowPlaying;
                 }
                 else
                 {
                     NowPlaying = "Not Currently Playing Anything";
-                    return NowPlaying;
                 }
             } catch (Exception ex)
             {
                 NowPlaying = "Not Currently Playing Anything";
                 Console.WriteLine($"[EXCEPTION CAUGHT IN MEDIA SERVICE] {ex.Message}");
-                return NowPlaying;
             }
+
+            if (System.Diagnostics.Debugger.IsAttached) Console.WriteLine($"[DEBUG] Now Playing - {NowPlaying}");
+            WSSession.SendText(NowPlaying);
         }
 
         public async Task TryMediaControl(MediaControlType type)
         {
             try
             {
-                var session = MediaTransportControlsSessionManager!.GetCurrentSession();
-                if (session != null)
+                if (CurrentMediaSession != null)
                 {
                     switch(type)
                     {
                         case MediaControlType.Play:
                             Console.WriteLine("[WMS] Toggling Play...");
-                            await session.TryPlayAsync();
+                            await CurrentMediaSession.TryPlayAsync();
                             break;
                         case MediaControlType.Pause:
                             Console.WriteLine("[WMS] Toggling Pause...");
-                            await session.TryPauseAsync();
+                            await CurrentMediaSession.TryPauseAsync();
                             break;
                         case MediaControlType.Stop:
                             Console.WriteLine("[WMS] Toggling Stop...");
-                            await session.TryStopAsync();
+                            await CurrentMediaSession.TryStopAsync();
                             break;
                         case MediaControlType.Skip:
                             Console.WriteLine("[WMS] Skipping...");
-                            await session.TrySkipNextAsync();
+                            await CurrentMediaSession.TrySkipNextAsync();
+                            break;
+                        case MediaControlType.Previous:
+                            Console.WriteLine("[WMS] Going Back To Previous...");
+                            await CurrentMediaSession.TrySkipPreviousAsync();
                             break;
                     }
                 }
@@ -124,18 +173,27 @@ namespace ResoniteMediaReporter.Services
         {
             Console.WriteLine("Disposing Windows Media Service...");
 
+            // deregister events
+            MediaTransportControlsSessionManager.CurrentSessionChanged -= MediaTransportControlsSessionManager_CurrentSessionChanged;
+            if (CurrentMediaSession != null)
+            {
+                CurrentMediaSession.PlaybackInfoChanged -= CurrentMediaSession_PlaybackInfoChanged;
+                CurrentMediaSession.MediaPropertiesChanged -= CurrentMediaSession_MediaPropertiesChanged;
+            }
+
+            // null out everything
             MediaTransportControlsSessionManager = null;
             CurrentMediaSession = null;
             CurrentMediaProperties = null;
-
+            
+            // reset now playing
             NowPlaying = "Not Currently Playing Anything";
 
             Console.WriteLine("Disposed.");
         }
 
         private static async Task<GlobalSystemMediaTransportControlsSessionManager> GetSystemMediaTransportControlsSessionManager() => await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-        private static async Task<GlobalSystemMediaTransportControlsSessionMediaProperties> GetMediaProperties(GlobalSystemMediaTransportControlsSession session) => await session.TryGetMediaPropertiesAsync();
 
-        public enum MediaControlType { Play, Pause, Stop, Skip }
+        public enum MediaControlType { Play, Pause, Stop, Skip, Previous }
     }
 }

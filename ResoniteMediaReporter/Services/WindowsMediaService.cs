@@ -25,9 +25,9 @@ namespace ResoniteMediaReporter.Services
 
             // try and get current session
             CurrentMediaSession = MediaTransportControlsSessionManager.GetCurrentSession();
-            CurrentMediaProperties = CurrentMediaSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
             if (CurrentMediaSession != null)
             {
+                CurrentMediaProperties = CurrentMediaSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
                 CurrentMediaSession.MediaPropertiesChanged += CurrentMediaSession_MediaPropertiesChanged;
                 CurrentMediaSession.PlaybackInfoChanged += CurrentMediaSession_PlaybackInfoChanged;
 

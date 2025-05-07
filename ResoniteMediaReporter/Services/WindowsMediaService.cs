@@ -33,7 +33,7 @@ namespace ResoniteMediaReporter.Services
 
                 UpdateAndGetCurrentlyPlayingMedia();
             }
-            else WSSession.SendText(NowPlaying);
+            else WSSession.SendText("Not Currently Playing Anything");
 
             Console.WriteLine("WMS Ready");
         }
@@ -53,6 +53,7 @@ namespace ResoniteMediaReporter.Services
 
                 Console.WriteLine($"[WMS] Current Media Session Changed, Detected Player - {CurrentMediaSession.SourceAppUserModelId}");
             }
+            else WSSession.SendText("Not Currently Playing Anything");
         }
 
         private void CurrentMediaSession_MediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)

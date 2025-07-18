@@ -12,11 +12,12 @@ namespace ResoniteMediaReporter.Services
 
         public ResoniteWSSession WSSession { get; private set; }
         public ResoniteWSServer Server { get; private set; }
-
+        public Config Config { get; }
         public WindowsMediaService(ResoniteWSSession session, ResoniteWSServer server)
         {
             WSSession = session;
             Server = server;
+            Config = server.Config;
 
             Console.WriteLine("Initializing Windows Media Service For Client...");
             SetSystemMediaTransportControlsSessionManager().GetAwaiter().GetResult();
@@ -59,6 +60,7 @@ namespace ResoniteMediaReporter.Services
         private void CurrentMediaSession_MediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)
         {
             CurrentMediaProperties = CurrentMediaSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
+
 
             if (CurrentMediaProperties != null)
             {

@@ -13,5 +13,9 @@ namespace ResoniteMediaReporter
         public int Port { get; set; }
         [JsonPropertyName("ignorePlayers")]
         public string[] IgnorePlayers { get; set; }
+        public int LyricsPort { get; set; }
+        public List<string> DisableLyricsFor { get; set; } = new();
+
+
     }
 }

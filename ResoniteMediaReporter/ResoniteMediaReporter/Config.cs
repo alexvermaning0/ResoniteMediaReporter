@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace ResoniteMediaReporter
 {
@@ -11,11 +7,19 @@ namespace ResoniteMediaReporter
     {
         [JsonPropertyName("port")]
         public int Port { get; set; }
+
         [JsonPropertyName("ignorePlayers")]
         public string[] IgnorePlayers { get; set; }
+
+        [JsonPropertyName("lyricsPort")]
         public int LyricsPort { get; set; }
+
         public List<string> DisableLyricsFor { get; set; } = new();
 
+        [JsonPropertyName("offset_ms")]
+        public int OffsetMs { get; set; } = 0;
 
+        [JsonPropertyName("cache_folder")]
+        public string CacheFolder { get; set; } = "cache";
     }
 }

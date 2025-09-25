@@ -6,6 +6,7 @@ int port = 8080;
 int lyricsPort = 6555;
 
 Console.WriteLine("Starting Resonite Media Reporter...");
+Console.WriteLine("Offset (ms) will be applied to lyric timing if set in config.");
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 

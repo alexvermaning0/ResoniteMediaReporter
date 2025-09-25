@@ -1,8 +1,5 @@
 using NetCoreServer;
-using ResoniteMediaReporter.Services;
 using System;
-using System.Text;
-
 
 namespace ResoniteMediaReporter.Services
 {
@@ -16,35 +13,29 @@ namespace ResoniteMediaReporter.Services
             _lyricsService.OnLyricUpdate += SendLyric;
         }
 
-        private void SendLyric(string message)
+        private void SendLyric(string text)
         {
-            if (IsConnected)
-            {
-                try
-                {
-                    SendText(message);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[LyricsWSSession] Failed to send lyric: {ex.Message}");
-                }
-            }
+            // sends "lyric progress"
+            SendText(text ?? "");
         }
 
         public override void OnWsConnected(HttpRequest request)
         {
-            Console.WriteLine($"Lyrics Client Connected With Id {Id}");
+            base.OnWsConnected(request);
+            LyricsWSServer.ConnectedCount++;
+            Console.WriteLine($"[WebSocket] Lyrics clients connected: {LyricsWSServer.ConnectedCount}");
         }
 
         public override void OnWsDisconnected()
         {
-            Console.WriteLine($"Lyrics Client With Id {Id} Disconnected");
-            _lyricsService.OnLyricUpdate -= SendLyric;
+            base.OnWsDisconnected();
+            LyricsWSServer.ConnectedCount = Math.Max(0, LyricsWSServer.ConnectedCount - 1);
+            Console.WriteLine($"[WebSocket] Lyrics clients connected: {LyricsWSServer.ConnectedCount}");
         }
+
         public override void OnWsReceived(byte[] buffer, long offset, long size)
         {
-            string msg = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
-
+            var msg = System.Text.Encoding.UTF8.GetString(buffer, (int)offset, (int)size).Trim().ToLowerInvariant();
             if (msg == "wordsync:on")
             {
                 _lyricsService.EnableWordSync();
@@ -56,7 +47,5 @@ namespace ResoniteMediaReporter.Services
                 SendText("Line sync enabled");
             }
         }
-
-
     }
 }

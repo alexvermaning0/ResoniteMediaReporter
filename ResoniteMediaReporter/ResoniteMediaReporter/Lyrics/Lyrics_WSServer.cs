@@ -1,12 +1,11 @@
 using NetCoreServer;
-using ResoniteMediaReporter.Lyrics;
-using ResoniteMediaReporter.Services;
-
 
 namespace ResoniteMediaReporter.Services
 {
     public class LyricsWSServer : WsServer
     {
+        public static int ConnectedCount = 0;
+
         public LyricsService LyricsService { get; private set; }
 
         public LyricsWSServer(string address, int port, LyricsService lyricsService) : base(address, port)
@@ -17,6 +16,5 @@ namespace ResoniteMediaReporter.Services
         {
             return new LyricsWSSession(this, LyricsService);
         }
-
     }
 }

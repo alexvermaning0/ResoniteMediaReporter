@@ -12,8 +12,12 @@ Here, you can change the port the WS server is running on and put in any media p
 # Example Config
 ```
 {
-	"port": 8080,
-	"ignorePlayers": ["Spotify.exe"]
+  "port": 8080,
+  "ignorePlayers": [],
+  "LyricsPort": 6555,
+  "DisableLyricsFor": [],
+  "offset_ms": -50,
+  "cache_folder": "cache"
 }
 ```
 

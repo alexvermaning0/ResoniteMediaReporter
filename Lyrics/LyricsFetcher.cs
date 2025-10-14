@@ -20,6 +20,18 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
         // set from LyricsService
         public static string CacheFolder { get; set; } = "cache";
 
+        // Logging callback
+        private static Action<string> _logCallback;
+        public static void SetLogCallback(Action<string> callback)
+        {
+            _logCallback = callback;
+        }
+
+        private static void Log(string message)
+        {
+            _logCallback?.Invoke(message);
+        }
+
         public bool NeedsNewSong(string title, string artist)
         {
             return !string.Equals(title ?? "", _currentTitle ?? "", StringComparison.OrdinalIgnoreCase)
@@ -34,35 +46,45 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             CurrentSource = "None";
 
             // 1) cache
+            Log("Trying: Cache");
             if (CacheHelper.TryLoad(CacheFolder, _currentArtist, _currentTitle, out var cached))
             {
                 _lyrics = cached;
                 CurrentSource = "cache";
+                Log("✓ Found in cache");
                 return;
             }
+            Log("✗ Not in cache");
 
             // 2) lrclib
+            Log("Trying: LRCLib");
             var lrclines = LRCLibFetcher.GetLyrics(_currentTitle, _currentArtist, durationMs);
             if (lrclines != null && lrclines.Count > 0)
             {
                 _lyrics = lrclines;
                 CurrentSource = "lrclib";
+                Log($"✓ LRCLib found {lrclines.Count} lines");
                 CacheHelper.Save(CacheFolder, _currentArtist, _currentTitle, _lyrics, CurrentSource);
                 return;
             }
+            Log("✗ LRCLib found nothing");
 
             // 3) netease
+            Log("Trying: NetEase");
             var netease = NetEaseFetcher.GetLyrics(_currentTitle, _currentArtist);
             if (netease != null && netease.Count > 0)
             {
                 _lyrics = netease;
                 CurrentSource = "netease";
+                Log($"✓ NetEase found {netease.Count} lines");
                 CacheHelper.Save(CacheFolder, _currentArtist, _currentTitle, _lyrics, CurrentSource);
                 return;
             }
+            Log("✗ NetEase found nothing");
 
             CurrentSource = "None";
             _lyrics = new List<LyricsLine>();
+            Log("✗ No lyrics found from any source");
         }
 
         public string GetCurrentLine(long positionMs)
@@ -88,15 +110,15 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             if (interval <= 0) return "";
 
             // ---- Tunables ----
-            const int LongPauseThresholdMs = 2000; // treat tail as silence if interval >= this
-            const double SpokenPortionCap = 0.60;  // max portion of a very-long interval used for words
-            const int MaxWordMs = 350;             // per-token cap
-            const int MinWordMs = 60;              // per-token floor
+            const int LongPauseThresholdMs = 2000;
+            const double SpokenPortionCap = 0.60;
+            const int MaxWordMs = 350;
+            const int MinWordMs = 60;
 
-            // punctuation pauses (silent, no highlight)
-            const int CommaPauseMs = 120;          // ← requested "a bit of delay" after comma
-            const int MidPauseMs = 140;            // ; :
-            const int FullStopPauseMs = 180;       // . ! ?
+            // punctuation pauses
+            const int CommaPauseMs = 120;
+            const int MidPauseMs = 140;
+            const int FullStopPauseMs = 180;
 
             // ---- Tokenize & weight ----
             var rawTokens = (current.Text ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -114,12 +136,10 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             var weights = rawTokens.Select(WeightOf).ToArray();
             int totalWeight = Math.Max(1, weights.Sum());
 
-            // ---- Allowed content window (do not exceed) ----
+            // ---- Allowed content window ----
             long allowedContentMs;
             if (interval >= LongPauseThresholdMs)
             {
-                // for very long gaps, reveal up to SpokenPortionCap of the interval, also
-                // bounded by per-token caps to avoid super slow crawl
                 long capByPortion = (long)(interval * SpokenPortionCap);
                 long capByPerToken = (long)rawTokens.Count * MaxWordMs;
                 allowedContentMs = Math.Min(capByPortion, capByPerToken);
@@ -130,17 +150,16 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
                 allowedContentMs = interval;
             }
 
-            // ---- Initial highlight durations (proportional to token weight) ----
+            // ---- Initial highlight durations ----
             var idealDurations = new double[rawTokens.Count];
             for (int i = 0; i < rawTokens.Count; i++)
                 idealDurations[i] = allowedContentMs * (weights[i] / (double)totalWeight);
 
-            // Clamp to min/max per token
             var highlightDur = new double[rawTokens.Count];
             for (int i = 0; i < rawTokens.Count; i++)
                 highlightDur[i] = Math.Clamp(idealDurations[i], MinWordMs, MaxWordMs);
 
-            // ---- Pause after punctuation (silent) ----
+            // ---- Pause after punctuation ----
             int PauseForToken(string token)
             {
                 if (string.IsNullOrEmpty(token)) return 0;
@@ -155,16 +174,13 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             for (int i = 0; i < rawTokens.Count; i++)
                 pauseAfter[i] = PauseForToken(rawTokens[i]);
 
-            // Total with pauses
             double baseSum = highlightDur.Sum();
             int pauseSum = pauseAfter.Sum();
             double totalWithPauses = baseSum + pauseSum;
 
-            // If total exceeds allowed window, scale down highlights (keep pauses as is)
             if (totalWithPauses > allowedContentMs && baseSum > 0)
             {
                 double scale = (allowedContentMs - pauseSum) / baseSum;
-                // avoid negative or ridiculous
                 scale = Math.Clamp(scale, 0.2, 1.0);
                 for (int i = 0; i < highlightDur.Length; i++)
                     highlightDur[i] *= scale;
@@ -173,39 +189,34 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
                 totalWithPauses = baseSum + pauseSum;
             }
 
-            // ---- Build cumulative segments: [highlight_i] then [pause_i] ----
-            // elapsed falling in a pause_i → return "" (silence).
+            // ---- Build cumulative segments ----
             var segEnds = new double[rawTokens.Count * 2];
             int seg = 0;
             double acc = 0;
             for (int i = 0; i < rawTokens.Count; i++)
             {
-                acc += highlightDur[i];          // highlight segment end
+                acc += highlightDur[i];
                 segEnds[seg++] = acc;
-                acc += pauseAfter[i];            // pause segment end
+                acc += pauseAfter[i];
                 segEnds[seg++] = acc;
             }
 
-            // ---- Decide what to show for current elapsed ----
+            // ---- Decide what to show ----
             long elapsed = positionMs - current.Time;
             if (elapsed < 0) return "";
 
-            // If we exhausted content before the next line, show nothing
             if (elapsed >= (long)totalWithPauses)
                 return "";
 
-            // Find segment
             int segIndex = Array.FindIndex(segEnds, end => elapsed <= end);
             if (segIndex < 0) segIndex = segEnds.Length - 1;
 
-            // Even segIndex → highlight segment; odd segIndex → pause segment
             if ((segIndex % 2) == 1)
-                return ""; // in a pause: show nothing
+                return "";
 
             int tokenIndex = segIndex / 2;
             if (tokenIndex >= rawTokens.Count) tokenIndex = rawTokens.Count - 1;
 
-            // Rebuild with highlight
             var rebuilt = new List<string>(rawTokens.Count);
             for (int i = 0; i < rawTokens.Count; i++)
             {

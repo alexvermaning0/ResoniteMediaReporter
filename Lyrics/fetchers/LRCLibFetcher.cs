@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -15,7 +15,7 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             public string trackName { get; set; }
             public string artistName { get; set; }
             public string albumName { get; set; }
-            public int duration { get; set; }
+            public double duration { get; set; }
             public bool instrumental { get; set; }
         }
 
@@ -44,19 +44,55 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
                 var results = JsonSerializer.Deserialize<List<SearchResult>>(json) ?? new List<SearchResult>();
                 if (results.Count == 0) return new List<LyricsLine>();
 
-                var id = results[0].id;
+                // Try each result until we find suitable lyrics
+                foreach (var result in results)
+                {
+                    // Skip instrumental tracks
+                    if (result.instrumental) continue;
 
-                var getJson = wc.DownloadString($"https://lrclib.net/api/get/{id}");
-                var get = JsonSerializer.Deserialize<LyricGet>(getJson);
-                var lrc = get?.syncedLyrics ?? get?.plainLyrics ?? "";
-                if (string.IsNullOrWhiteSpace(lrc)) return new List<LyricsLine>();
+                    var getJson = wc.DownloadString($"https://lrclib.net/api/get/{result.id}");
+                    var get = JsonSerializer.Deserialize<LyricGet>(getJson);
+                    var lrc = get?.syncedLyrics ?? get?.plainLyrics ?? "";
+                    if (string.IsNullOrWhiteSpace(lrc)) continue;
 
-                return ParseLrc(lrc);
+                    // Check if lyrics are mostly CJK (>30% CJK characters)
+                    if (IsMostlyCJK(lrc)) continue;
+
+                    var parsed = ParseLrc(lrc);
+                    if (parsed.Count > 0) return parsed;
+                }
+
+                return new List<LyricsLine>();
             }
             catch
             {
                 return new List<LyricsLine>();
             }
+        }
+
+        private static bool IsMostlyCJK(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+
+            int totalChars = 0;
+            int cjkChars = 0;
+
+            foreach (char c in text)
+            {
+                if (char.IsLetterOrDigit(c) || c > 127)
+                {
+                    totalChars++;
+                    if ((c >= 0x4E00 && c <= 0x9FFF) ||  // Chinese
+                        (c >= 0x3040 && c <= 0x309F) ||  // Hiragana
+                        (c >= 0x30A0 && c <= 0x30FF) ||  // Katakana
+                        (c >= 0xAC00 && c <= 0xD7AF))    // Korean
+                    {
+                        cjkChars++;
+                    }
+                }
+            }
+
+            return totalChars > 0 && ((double)cjkChars / totalChars) > 0.3;
         }
 
         private static List<LyricsLine> ParseLrc(string lrc)
@@ -74,6 +110,8 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
                 int sec = int.Parse(match.Groups[2].Value);
                 int ms = int.Parse(match.Groups[3].Value.PadRight(3, '0'));
                 string text = match.Groups[4].Value.Trim();
+
+                if (string.IsNullOrWhiteSpace(text)) continue;
 
                 result.Add(new LyricsLine
                 {

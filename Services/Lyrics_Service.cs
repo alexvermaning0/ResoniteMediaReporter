@@ -21,16 +21,15 @@ namespace ResoniteMediaReporter.Services
         private string _currentSource = "None";
         private DateTime _lastLyricUpdateTime = DateTime.MinValue;
         private DateTime _lastBroadcastTime = DateTime.MinValue;
-        private string _lastDisplay = "";
         private readonly Queue<string> _debugLog = new();
 
-        // position simulation (SMTC can be slow)
+        // position simulation
         private long _lastKnownPosition = 0;
         private DateTime _lastPositionUpdateTime = DateTime.MinValue;
         private bool _isPlaying = false;
 
         // modes
-        private bool _wordSyncMode = false; // default to "line" mode
+        private bool _wordSyncMode = false;
 
         public event Action<string> OnLyricUpdate;
 
@@ -39,6 +38,9 @@ namespace ResoniteMediaReporter.Services
             _wmService = wmService;
             _lyricsFetcher = new LyricsFetcher();
             LyricsFetcher.CacheFolder = _wmService?.Config?.CacheFolder ?? "cache";
+
+            // Hook up the fetcher logging to our debug log
+            LyricsFetcher.SetLogCallback(DebugLog);
 
             _disabledSources = wmService.Config?.DisableLyricsFor?
                 .Select(x => x.ToLowerInvariant())
@@ -66,7 +68,7 @@ namespace ResoniteMediaReporter.Services
             bool isNowPlaying = playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
             long smtcPos = (long)timeline.Position.TotalMilliseconds;
 
-            // apply configurable offset (can be negative)
+            // apply configurable offset
             int offset = _wmService?.Config?.OffsetMs ?? 0;
             long smtcPosWithOffset = smtcPos + offset;
 
@@ -75,19 +77,15 @@ namespace ResoniteMediaReporter.Services
             {
                 if (!_isPlaying)
                 {
-                    // just started playing -> lock to SMTC (+offset)
                     _lastKnownPosition = smtcPosWithOffset;
                     _lastPositionUpdateTime = DateTime.UtcNow;
                     _isPlaying = true;
                 }
                 else
                 {
-                    // expected local time since last tick
                     long expected = _lastKnownPosition + (long)(DateTime.UtcNow - _lastPositionUpdateTime).TotalMilliseconds;
                     long difference = smtcPosWithOffset - expected;
 
-                    // ORIGINAL SNAP LOGIC from your ZIP:
-                    // snap if jumped forward > 500ms OR if |drift| > 1500ms AND NeedsNewSong(...)
                     if (difference > 500 || (Math.Abs(difference) > 1500 && _lyricsFetcher.NeedsNewSong(title, artist)))
                     {
                         _lastKnownPosition = smtcPosWithOffset;
@@ -106,6 +104,7 @@ namespace ResoniteMediaReporter.Services
             // new song fetch?
             if (_lyricsFetcher.NeedsNewSong(title, artist))
             {
+                DebugLog($"Fetching lyrics: {title} - {artist}");
                 _lyricsFetcher.FetchLyrics(title, artist, (int)timeline.EndTime.TotalMilliseconds);
                 _currentSource = _lyricsFetcher.CurrentSource ?? "None";
                 _lastTitle = title;
@@ -113,23 +112,19 @@ namespace ResoniteMediaReporter.Services
                 _currentLyric = "";
                 _lastLyricUpdateTime = DateTime.MinValue;
 
-                DebugLog($"Fetched new lyrics for: {title} - {artist} (via {_currentSource})");
+                DebugLog($"Lyrics source: {_currentSource}");
             }
 
             bool shouldUpdate = false;
             string formattedLyric = "";
-            string displayLyric = "";
 
             if (_disabledSources.Contains(_currentSource.ToLowerInvariant()))
             {
                 formattedLyric = "";
-                displayLyric = "";
             }
             else if (_wordSyncMode)
             {
-                // per-word highlight using next-line interval; returns "" if interval invalid/too big
                 formattedLyric = _lyricsFetcher.GetCurrentLineWordSync(simulatedPosition);
-                displayLyric = formattedLyric;
                 _currentLyric = formattedLyric;
                 if (!string.IsNullOrEmpty(formattedLyric))
                     shouldUpdate = true;
@@ -150,11 +145,10 @@ namespace ResoniteMediaReporter.Services
                     shouldUpdate = true;
                 }
 
-                formattedLyric = _currentLyric; // for broadcast
-                displayLyric = _currentLyric;
+                formattedLyric = _currentLyric;
             }
 
-            // progress (always send; prefer SMTC duration)
+            // progress
             double durationMs = timeline.EndTime.TotalMilliseconds > 0
                 ? timeline.EndTime.TotalMilliseconds
                 : _lyricsFetcher.GetSongLength();
@@ -163,7 +157,7 @@ namespace ResoniteMediaReporter.Services
                 ? Math.Min(Math.Max(simulatedPosition, 0) / durationMs, 1.0)
                 : 0;
 
-            // broadcast cadence: lyric change OR heartbeat each 4s
+            // broadcast
             if (shouldUpdate || (DateTime.UtcNow - _lastBroadcastTime).TotalSeconds >= 4)
             {
                 string message = $"{(formattedLyric ?? "")} {progress:F3}";
@@ -171,7 +165,7 @@ namespace ResoniteMediaReporter.Services
                 _lastBroadcastTime = DateTime.UtcNow;
             }
 
-            // keep your console vibe; add mm:ss + offset
+            // update console display
             UpdateConsole(_lastTitle, _lastArtist, simulatedPosition);
         }
 
@@ -182,12 +176,12 @@ namespace ResoniteMediaReporter.Services
             Console.WriteLine($"🎵 Now Playing: {title} - {artist}");
             Console.WriteLine($"📡 Source: {_currentSource}");
             Console.WriteLine($"🕒 Position: {FormatTime(position)}");
-            Console.WriteLine($"⏱ Offset: {_wmService?.Config?.OffsetMs ?? 0} ms");
+            Console.WriteLine($"⏱  Offset: {_wmService?.Config?.OffsetMs ?? 0} ms");
             Console.Write("🎤 Lyric: ");
             WriteLyricWithColor(_currentLyric);
-            Console.WriteLine($"🎛 Sync Mode: {(_wordSyncMode ? "Word Sync" : "Full Lyric")}");
+            Console.WriteLine($"🎛  Sync Mode: {(_wordSyncMode ? "Word Sync" : "Full Lyric")}");
 
-            Console.WriteLine("\n\n📋 Debug Log:");
+            Console.WriteLine("\n📋 Debug Log:");
             foreach (var line in _debugLog.Reverse())
                 Console.WriteLine(" - " + line);
         }

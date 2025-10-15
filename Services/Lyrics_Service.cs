@@ -169,21 +169,157 @@ namespace ResoniteMediaReporter.Services
             UpdateConsole(_lastTitle, _lastArtist, simulatedPosition);
         }
 
+        private string _lastConsoleOutput = "";
+        private DateTime _lastFullRedraw = DateTime.MinValue;
+        private bool _consoleInitialized = false;
+
         private void UpdateConsole(string title, string artist, long position)
         {
-            Console.Clear();
+            // Initialize console once
+            if (!_consoleInitialized)
+            {
+                Console.Clear();
+                Console.CursorVisible = false;
 
-            Console.WriteLine($"🎵 Now Playing: {title} - {artist}");
-            Console.WriteLine($"📡 Source: {_currentSource}");
-            Console.WriteLine($"🕒 Position: {FormatTime(position)}");
-            Console.WriteLine($"⏱  Offset: {_wmService?.Config?.OffsetMs ?? 0} ms");
+                // Disable console scrolling by setting buffer height to window height
+                try
+                {
+                    Console.SetBufferSize(Console.WindowWidth, Console.WindowHeight);
+                }
+                catch { } // Ignore if can't set buffer size
+
+                _consoleInitialized = true;
+            }
+
+            // Update each line individually without clearing
+            Console.SetCursorPosition(0, 0);
+
+            WriteConsoleLine($"🎵 Now Playing: {title} - {artist}");
+            WriteConsoleLine($"📡 Source: {_currentSource}");
+            WriteConsoleLine($"🕒 Position: {FormatTime(position)}");
+            WriteConsoleLine($"⏱  Offset: {_wmService?.Config?.OffsetMs ?? 0} ms");
+
             Console.Write("🎤 Lyric: ");
-            WriteLyricWithColor(_currentLyric);
-            Console.WriteLine($"🎛  Sync Mode: {(_wordSyncMode ? "Word Sync" : "Full Lyric")}");
+            WriteLyricWithColorInline(_currentLyric);
+            Console.WriteLine(); // Move to next line after lyric
 
-            Console.WriteLine("\n📋 Debug Log:");
+            WriteConsoleLine($"🎛  Sync Mode: {(_wordSyncMode ? "Word Sync" : "Full Lyric")}");
+            WriteConsoleLine("");
+            WriteConsoleLine("📋 Debug Log:");
+
+            int logLine = 0;
             foreach (var line in _debugLog.Reverse())
-                Console.WriteLine(" - " + line);
+            {
+                WriteConsoleLine(" - " + line);
+                logLine++;
+            }
+
+            // Fill remaining log lines with spaces to clear old content
+            for (int i = logLine; i < 15; i++)
+            {
+                WriteConsoleLine(new string(' ', Console.WindowWidth - 1));
+            }
+        }
+
+        private void WriteConsoleLine(string text)
+        {
+            // Pad to window width to overwrite old content
+            int width = Console.WindowWidth - 1;
+            if (text.Length > width)
+                text = text.Substring(0, width);
+            else
+                text = text.PadRight(width);
+
+            Console.WriteLine(text);
+        }
+
+        private void WriteLyricWithColorInline(string lyric)
+        {
+            if (string.IsNullOrEmpty(lyric))
+            {
+                Console.Write(new string(' ', Console.WindowWidth - 15)); // Clear lyric line
+                return;
+            }
+
+            // Save cursor position
+            int startCol = Console.CursorLeft;
+            int startRow = Console.CursorTop;
+
+            if (!_wordSyncMode)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write(lyric);
+                Console.ResetColor();
+                // Pad to clear old content
+                int written = lyric.Length;
+                int toClear = Console.WindowWidth - Console.CursorLeft - 1;
+                if (toClear > 0)
+                    Console.Write(new string(' ', toClear));
+                return;
+            }
+
+            // parse <color=yellow>...</color> spans
+            int idx = 0;
+            int charsWritten = 0;
+            while (idx < lyric.Length)
+            {
+                int startTag = lyric.IndexOf("<color=yellow>", idx, StringComparison.OrdinalIgnoreCase);
+                if (startTag == -1)
+                {
+                    Console.ResetColor();
+                    string remaining = lyric.Substring(idx);
+                    Console.Write(remaining);
+                    charsWritten += remaining.Length;
+                    break;
+                }
+
+                if (startTag > idx)
+                {
+                    Console.ResetColor();
+                    string text = lyric.Substring(idx, startTag - idx);
+                    Console.Write(text);
+                    charsWritten += text.Length;
+                }
+
+                int endTag = lyric.IndexOf("</color>", startTag, StringComparison.OrdinalIgnoreCase);
+                if (endTag == -1)
+                {
+                    Console.ResetColor();
+                    string remaining = lyric.Substring(startTag);
+                    Console.Write(remaining);
+                    charsWritten += remaining.Length;
+                    break;
+                }
+
+                int highlightStart = startTag + "<color=yellow>".Length;
+                string highlighted = lyric.Substring(highlightStart, endTag - highlightStart);
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write(highlighted);
+                charsWritten += highlighted.Length;
+
+                idx = endTag + "</color>".Length;
+            }
+
+            Console.ResetColor();
+
+            // Pad to clear old content
+            int toClearEnd = Console.WindowWidth - Console.CursorLeft - 1;
+            if (toClearEnd > 0)
+                Console.Write(new string(' ', toClearEnd));
+        }
+
+        private string GetLyricPlainText(string lyric)
+        {
+            if (string.IsNullOrEmpty(lyric)) return "";
+
+            // Strip color tags for comparison
+            return lyric.Replace("<color=yellow>", "").Replace("</color>", "");
+        }
+
+        private void WriteLyricWithColor(string lyric)
+        {
+            // This method is no longer used, kept for compatibility
+            WriteLyricWithColorInline(lyric);
         }
 
         private string FormatTime(long ms)
@@ -193,61 +329,6 @@ namespace ResoniteMediaReporter.Services
             long seconds = (absMs % 60000) / 1000;
             string sign = ms < 0 ? "-" : "";
             return $"{sign}{minutes:00}:{seconds:00} ({ms} ms)";
-        }
-
-        private void WriteLyricWithColor(string lyric)
-        {
-            if (string.IsNullOrEmpty(lyric))
-            {
-                Console.WriteLine();
-                return;
-            }
-
-            if (!_wordSyncMode)
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine(lyric);
-                Console.ResetColor();
-                return;
-            }
-
-            // parse <color=yellow>...</color> spans
-            int idx = 0;
-            while (idx < lyric.Length)
-            {
-                int startTag = lyric.IndexOf("<color=yellow>", idx, StringComparison.OrdinalIgnoreCase);
-                if (startTag == -1)
-                {
-                    Console.ResetColor();
-                    Console.WriteLine(lyric.Substring(idx));
-                    break;
-                }
-
-                if (startTag > idx)
-                {
-                    Console.ResetColor();
-                    Console.Write(lyric.Substring(idx, startTag - idx));
-                }
-
-                int endTag = lyric.IndexOf("</color>", startTag, StringComparison.OrdinalIgnoreCase);
-                if (endTag == -1)
-                {
-                    Console.ResetColor();
-                    Console.WriteLine(lyric.Substring(startTag));
-                    break;
-                }
-
-                int highlightStart = startTag + "<color=yellow>".Length;
-                string highlighted = lyric.Substring(highlightStart, endTag - highlightStart);
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Write(highlighted);
-
-                idx = endTag + "</color>".Length;
-                if (idx >= lyric.Length)
-                    Console.WriteLine();
-            }
-
-            Console.ResetColor();
         }
 
         public void EnableWordSync()
@@ -264,7 +345,7 @@ namespace ResoniteMediaReporter.Services
 
         private void DebugLog(string message)
         {
-            if (_debugLog.Count >= 5)
+            if (_debugLog.Count >= 15)  // Increased from 5 to 15
                 _debugLog.Dequeue();
             _debugLog.Enqueue($"[{DateTime.Now:HH:mm:ss}] {message}");
         }

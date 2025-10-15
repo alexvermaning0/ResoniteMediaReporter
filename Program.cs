@@ -22,7 +22,10 @@ if (!File.Exists("config.json"))
         Port = port,
         IgnorePlayers = Array.Empty<string>(),
         LyricsPort = lyricsPort,
-        DisableLyricsFor = new List<string>()
+        DisableLyricsFor = new List<string>(),
+        OffsetMs = 0,
+        CacheFolder = "cache",
+        FilterCjkLyrics = true
     };
 
     JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };

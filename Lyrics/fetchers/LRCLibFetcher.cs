@@ -56,7 +56,7 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
                     if (string.IsNullOrWhiteSpace(lrc)) continue;
 
                     // Check if lyrics are mostly CJK (>30% CJK characters)
-                    if (IsMostlyCJK(lrc)) continue;
+                    if (LyricsFetcher.FilterCjkLyrics && IsMostlyCJK(lrc)) continue;
 
                     var parsed = ParseLrc(lrc);
                     if (parsed.Count > 0) return parsed;

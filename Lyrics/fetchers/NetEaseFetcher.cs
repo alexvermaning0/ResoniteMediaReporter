@@ -26,12 +26,41 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
                 if (!lrcMatch.Success) return null;
 
                 string decoded = WebUtility.HtmlDecode(lrcMatch.Groups[1].Value).Replace("\\n", "\n");
+
+                // Check if lyrics are mostly CJK (>30% CJK characters)
+                if (LyricsFetcher.FilterCjkLyrics && IsMostlyCJK(decoded)) return null;
+
                 return ParseLRC(decoded);
             }
             catch
             {
                 return null;
             }
+        }
+
+        private static bool IsMostlyCJK(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+
+            int totalChars = 0;
+            int cjkChars = 0;
+
+            foreach (char c in text)
+            {
+                if (char.IsLetterOrDigit(c) || c > 127)
+                {
+                    totalChars++;
+                    if ((c >= 0x4E00 && c <= 0x9FFF) ||  // Chinese
+                        (c >= 0x3040 && c <= 0x309F) ||  // Hiragana
+                        (c >= 0x30A0 && c <= 0x30FF) ||  // Katakana
+                        (c >= 0xAC00 && c <= 0xD7AF))    // Korean
+                    {
+                        cjkChars++;
+                    }
+                }
+            }
+
+            return totalChars > 0 && ((double)cjkChars / totalChars) > 0.3;
         }
 
         public static List<LyricsLine> ParseLRC(string raw)

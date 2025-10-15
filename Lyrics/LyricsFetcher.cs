@@ -19,6 +19,7 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
 
         // set from LyricsService
         public static string CacheFolder { get; set; } = "cache";
+        public static bool FilterCjkLyrics { get; set; } = true;
 
         // Logging callback
         private static Action<string> _logCallback;

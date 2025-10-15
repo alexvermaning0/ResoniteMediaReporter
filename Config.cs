@@ -21,5 +21,8 @@ namespace ResoniteMediaReporter
 
         [JsonPropertyName("cache_folder")]
         public string CacheFolder { get; set; } = "cache";
+
+        [JsonPropertyName("filter_cjk_lyrics")]
+        public bool FilterCjkLyrics { get; set; } = true;
     }
 }

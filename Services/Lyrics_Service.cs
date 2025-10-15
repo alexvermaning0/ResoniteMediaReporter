@@ -31,6 +31,11 @@ namespace ResoniteMediaReporter.Services
         // modes
         private bool _wordSyncMode = false;
 
+        // console
+        private string _lastConsoleOutput = "";
+        private DateTime _lastFullRedraw = DateTime.MinValue;
+        private bool _consoleInitialized = false;
+
         public event Action<string> OnLyricUpdate;
 
         public LyricsService(WindowsMediaService wmService)
@@ -38,6 +43,7 @@ namespace ResoniteMediaReporter.Services
             _wmService = wmService;
             _lyricsFetcher = new LyricsFetcher();
             LyricsFetcher.CacheFolder = _wmService?.Config?.CacheFolder ?? "cache";
+            LyricsFetcher.FilterCjkLyrics = _wmService?.Config?.FilterCjkLyrics ?? true;
 
             // Hook up the fetcher logging to our debug log
             LyricsFetcher.SetLogCallback(DebugLog);
@@ -169,10 +175,6 @@ namespace ResoniteMediaReporter.Services
             UpdateConsole(_lastTitle, _lastArtist, simulatedPosition);
         }
 
-        private string _lastConsoleOutput = "";
-        private DateTime _lastFullRedraw = DateTime.MinValue;
-        private bool _consoleInitialized = false;
-
         private void UpdateConsole(string title, string artist, long position)
         {
             // Initialize console once
@@ -241,10 +243,6 @@ namespace ResoniteMediaReporter.Services
                 return;
             }
 
-            // Save cursor position
-            int startCol = Console.CursorLeft;
-            int startRow = Console.CursorTop;
-
             if (!_wordSyncMode)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
@@ -260,7 +258,6 @@ namespace ResoniteMediaReporter.Services
 
             // parse <color=yellow>...</color> spans
             int idx = 0;
-            int charsWritten = 0;
             while (idx < lyric.Length)
             {
                 int startTag = lyric.IndexOf("<color=yellow>", idx, StringComparison.OrdinalIgnoreCase);
@@ -269,7 +266,6 @@ namespace ResoniteMediaReporter.Services
                     Console.ResetColor();
                     string remaining = lyric.Substring(idx);
                     Console.Write(remaining);
-                    charsWritten += remaining.Length;
                     break;
                 }
 
@@ -278,7 +274,6 @@ namespace ResoniteMediaReporter.Services
                     Console.ResetColor();
                     string text = lyric.Substring(idx, startTag - idx);
                     Console.Write(text);
-                    charsWritten += text.Length;
                 }
 
                 int endTag = lyric.IndexOf("</color>", startTag, StringComparison.OrdinalIgnoreCase);
@@ -287,7 +282,6 @@ namespace ResoniteMediaReporter.Services
                     Console.ResetColor();
                     string remaining = lyric.Substring(startTag);
                     Console.Write(remaining);
-                    charsWritten += remaining.Length;
                     break;
                 }
 
@@ -295,7 +289,6 @@ namespace ResoniteMediaReporter.Services
                 string highlighted = lyric.Substring(highlightStart, endTag - highlightStart);
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.Write(highlighted);
-                charsWritten += highlighted.Length;
 
                 idx = endTag + "</color>".Length;
             }
@@ -306,20 +299,6 @@ namespace ResoniteMediaReporter.Services
             int toClearEnd = Console.WindowWidth - Console.CursorLeft - 1;
             if (toClearEnd > 0)
                 Console.Write(new string(' ', toClearEnd));
-        }
-
-        private string GetLyricPlainText(string lyric)
-        {
-            if (string.IsNullOrEmpty(lyric)) return "";
-
-            // Strip color tags for comparison
-            return lyric.Replace("<color=yellow>", "").Replace("</color>", "");
-        }
-
-        private void WriteLyricWithColor(string lyric)
-        {
-            // This method is no longer used, kept for compatibility
-            WriteLyricWithColorInline(lyric);
         }
 
         private string FormatTime(long ms)

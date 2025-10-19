@@ -44,7 +44,7 @@ Here, you can change the port the WS server is running on and configure various 
 
 For instant, offline lyrics access, you can download the complete LRCLib database:
 
-**Download:** [LRCLib Database Files - LINK_HERE]  
+**Download:** [Download database here](http://minekingshosting.nl:8686/web/client/pubshares/pwC58sHnMdWyZLF4i3SDBX/browse)  
 **Files Required:** 
 - `db.sqlite3` (~69GB) - Main database file
 - `db.sqlite3.index` (~230MB) - Pre-built index file
@@ -97,3 +97,5 @@ If you only download the database file without the index, the app will automatic
 [NetCoreServer](https://github.com/chronoxor/NetCoreServer)  
 [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore) - SQLite database access  
 [LRCLib](https://lrclib.net/) - Lyrics database and API
+
+

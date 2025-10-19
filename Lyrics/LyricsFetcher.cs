@@ -20,6 +20,7 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
         // set from LyricsService
         public static string CacheFolder { get; set; } = "cache";
         public static bool FilterCjkLyrics { get; set; } = true;
+        public static bool OfflineMode { get; set; } = false;
 
         // Logging callback
         private static Action<string> _logCallback;
@@ -57,7 +58,33 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             }
             Log("✗ Not in cache");
 
-            // 2) lrclib
+            // 2) local database
+            if (LocalDatabaseFetcher.IsAvailable())
+            {
+                Log("Trying: Local Database");
+                var localDb = LocalDatabaseFetcher.GetLyrics(_currentTitle, _currentArtist);
+                if (localDb != null && localDb.Count > 0)
+                {
+                    _lyrics = localDb;
+                    CurrentSource = "lrclib (local)";
+                    Log($"✓ Local DB found {localDb.Count} lines");
+                    CacheHelper.Save(CacheFolder, _currentArtist, _currentTitle, _lyrics, CurrentSource);
+                    return;
+                }
+                Log("✗ Local DB found nothing");
+            }
+
+            // If offline mode, stop here
+            if (OfflineMode)
+            {
+                Log("Offline mode - skipping online sources");
+                CurrentSource = "None";
+                _lyrics = new List<LyricsLine>();
+                Log("✗ No lyrics found (offline mode)");
+                return;
+            }
+
+            // 3) lrclib
             Log("Trying: LRCLib");
             var lrclines = LRCLibFetcher.GetLyrics(_currentTitle, _currentArtist, durationMs);
             if (lrclines != null && lrclines.Count > 0)
@@ -70,7 +97,7 @@ namespace ResoniteMediaReporter.Lyrics.Fetchers
             }
             Log("✗ LRCLib found nothing");
 
-            // 3) netease
+            // 4) netease
             Log("Trying: NetEase");
             var netease = NetEaseFetcher.GetLyrics(_currentTitle, _currentArtist);
             if (netease != null && netease.Count > 0)

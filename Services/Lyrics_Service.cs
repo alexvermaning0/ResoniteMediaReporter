@@ -44,6 +44,7 @@ namespace ResoniteMediaReporter.Services
             _lyricsFetcher = new LyricsFetcher();
             LyricsFetcher.CacheFolder = _wmService?.Config?.CacheFolder ?? "cache";
             LyricsFetcher.FilterCjkLyrics = _wmService?.Config?.FilterCjkLyrics ?? true;
+            LyricsFetcher.OfflineMode = _wmService?.Config?.OfflineMode ?? false;
 
             // Hook up the fetcher logging to our debug log
             LyricsFetcher.SetLogCallback(DebugLog);
@@ -119,6 +120,12 @@ namespace ResoniteMediaReporter.Services
                 _lastLyricUpdateTime = DateTime.MinValue;
 
                 DebugLog($"Lyrics source: {_currentSource}");
+            }
+            // Always update title/artist even if lyrics haven't changed
+            else if (title != _lastTitle || artist != _lastArtist)
+            {
+                _lastTitle = title;
+                _lastArtist = artist;
             }
 
             bool shouldUpdate = false;
@@ -200,6 +207,12 @@ namespace ResoniteMediaReporter.Services
             WriteConsoleLine($"📡 Source: {_currentSource}");
             WriteConsoleLine($"🕒 Position: {FormatTime(position)}");
             WriteConsoleLine($"⏱  Offset: {_wmService?.Config?.OffsetMs ?? 0} ms");
+
+            // Show offline mode indicator if enabled
+            if (LyricsFetcher.OfflineMode)
+            {
+                WriteConsoleLine($"🔌 Mode: OFFLINE");
+            }
 
             Console.Write("🎤 Lyric: ");
             WriteLyricWithColorInline(_currentLyric);

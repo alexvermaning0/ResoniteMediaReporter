@@ -1,5 +1,6 @@
 ﻿using ResoniteMediaReporter;
 using ResoniteMediaReporter.Services;
+using ResoniteMediaReporter.Lyrics.Fetchers;
 using System.Text.Json;
 
 int port = 8080;
@@ -25,7 +26,9 @@ if (!File.Exists("config.json"))
         DisableLyricsFor = new List<string>(),
         OffsetMs = 0,
         CacheFolder = "cache",
-        FilterCjkLyrics = true
+        FilterCjkLyrics = true,
+        OfflineMode = false,
+        LrclibDatabasePath = "db.sqlite3"
     };
 
     JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
@@ -36,6 +39,19 @@ if (!File.Exists("config.json"))
 }
 
 Config configFile = JsonSerializer.Deserialize<Config>(File.ReadAllText("config.json"));
+
+// Initialize local database if available
+LocalDatabaseFetcher.Initialize(configFile.LrclibDatabasePath);
+
+if (configFile.OfflineMode)
+{
+    Console.WriteLine("[INFO] Offline mode enabled - API calls disabled");
+    if (!LocalDatabaseFetcher.IsAvailable())
+    {
+        Console.WriteLine("[WARNING] Offline mode enabled but local database not found!");
+        Console.WriteLine($"[WARNING] Place database file at: {configFile.LrclibDatabasePath}");
+    }
+}
 
 // Initialize Resonite WebSocket Server
 var server = new ResoniteWSServer("127.0.0.1", configFile.Port)
@@ -81,4 +97,5 @@ server.Stop();
 lyricsServer.Stop();
 lyricsService.Dispose();
 wmService.Dispose();
+LocalDatabaseFetcher.Cleanup();
 Environment.Exit(0);

@@ -24,5 +24,11 @@ namespace ResoniteMediaReporter
 
         [JsonPropertyName("filter_cjk_lyrics")]
         public bool FilterCjkLyrics { get; set; } = true;
+
+        [JsonPropertyName("offline_mode")]
+        public bool OfflineMode { get; set; } = false;
+
+        [JsonPropertyName("lrclib_database_path")]
+        public string LrclibDatabasePath { get; set; } = "db.sqlite3";
     }
 }
